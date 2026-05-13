@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic-settings
+torch
+timm
+pillow
+numpy
+opencv-python-headless

@@ -1,0 +1,114 @@
+from pathlib import Path
+
+import pandas as pd
+from PIL import Image, ImageOps
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+
+from core.frequency import frequency_features
+
+try:
+    import albumentations as A
+    from albumentations.pytorch import ToTensorV2
+except Exception:
+    A = None
+    ToTensorV2 = None
+
+
+def build_transforms(image_size: int, train: bool = True):
+    if A is None or ToTensorV2 is None:
+        return None
+    steps = [
+        A.Resize(image_size, image_size),
+    ]
+    if train:
+        try:
+            image_compression = A.ImageCompression(quality_range=(45, 100), p=0.45)
+        except TypeError:
+            image_compression = A.ImageCompression(quality_lower=45, quality_upper=100, p=0.45)
+        try:
+            dropout = A.CoarseDropout(max_holes=2, max_height=24, max_width=24, p=0.15)
+        except TypeError:
+            dropout = A.CoarseDropout(p=0.15)
+        steps.extend(
+            [
+                A.HorizontalFlip(p=0.5),
+                A.ShiftScaleRotate(shift_limit=0.03, scale_limit=0.08, rotate_limit=8, border_mode=0, p=0.35),
+                image_compression,
+                A.GaussNoise(p=0.2),
+                A.ColorJitter(p=0.2),
+                A.MotionBlur(blur_limit=3, p=0.12),
+                A.Sharpen(p=0.12),
+                dropout,
+            ]
+        )
+    steps.extend(
+        [
+            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ToTensorV2(),
+        ]
+    )
+    return A.Compose(steps)
+
+
+class DeepfakeDataset(Dataset):
+    def __init__(
+        self,
+        manifest_path: str | Path,
+        image_size: int = 224,
+        train: bool = True,
+        root_dir: str | Path | None = None,
+        frequency_mode: str = "fft",
+    ) -> None:
+        self.manifest_path = Path(manifest_path)
+        self.root_dir = Path(root_dir) if root_dir else self.manifest_path.parent
+        self.frame = pd.read_csv(self.manifest_path)
+        required = {"path", "label"}
+        missing = required - set(self.frame.columns)
+        if missing:
+            raise ValueError(f"Manifest missing columns: {sorted(missing)}")
+        self.transforms = build_transforms(image_size=image_size, train=train)
+        self.image_size = image_size
+        self.frequency_mode = frequency_mode
+        self.labels = self.frame["label"].astype(int).tolist()
+
+    def __len__(self) -> int:
+        return len(self.frame)
+
+    def _load_image(self, path: str) -> Image.Image:
+        image_path = Path(path)
+        if not image_path.is_absolute():
+            image_path = self.root_dir / image_path
+        with Image.open(image_path) as image:
+            return ImageOps.exif_transpose(image).convert("RGB")
+
+    def _target(self, row) -> dict[str, torch.Tensor]:
+        label = float(row["label"])
+        fake_type = str(row.get("fake_type", row.get("source", "real"))).lower()
+        is_inswapper = float(row.get("is_inswapper", int("inswapper" in fake_type)))
+        is_gan = float(row.get("is_gan", int("gan" in fake_type)))
+        boundary = float(row.get("boundary_label", label))
+        quality = int(row.get("quality_label", 0))
+        return {
+            "real_fake": torch.tensor(label, dtype=torch.float32),
+            "inswapper": torch.tensor(is_inswapper, dtype=torch.float32),
+            "gan": torch.tensor(is_gan, dtype=torch.float32),
+            "boundary": torch.tensor(boundary, dtype=torch.float32),
+            "quality": torch.tensor(quality, dtype=torch.long),
+        }
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        row = self.frame.iloc[index]
+        image = self._load_image(str(row["path"]))
+        if self.transforms is not None:
+            transformed = self.transforms(image=np.asarray(image))
+            rgb = transformed["image"]
+        else:
+            image = image.resize((self.image_size, self.image_size))
+            arr = torch.from_numpy(np.asarray(image).astype("float32")).permute(2, 0, 1) / 255.0
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+            std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+            rgb = (arr - mean) / std
+        frequency = frequency_features(rgb.unsqueeze(0), mode=self.frequency_mode).squeeze(0)
+        return {"rgb": rgb, "frequency": frequency, "targets": self._target(row)}

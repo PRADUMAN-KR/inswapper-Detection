@@ -1,0 +1,53 @@
+model:
+  backbone: convnext_tiny
+  pretrained: true
+  image_size: 256
+  drop_path_rate: 0.1
+  frequency_mode: fft
+
+data:
+  root_dir: .
+  train_manifest: data/train.csv
+  val_manifest: data/val.csv
+  test_manifest: data/test.csv
+
+train:
+  device: auto
+  seed: 42
+  epochs: 30
+  batch_size: 32
+  num_workers: 4
+  amp: true
+  grad_accum_steps: 1
+  max_grad_norm: 1.0
+  balanced_sampler: true
+  early_stopping_patience: 7
+  early_stopping_min_delta: 0.0005
+  cudnn_benchmark: true
+  phases:
+    freeze_backbone_until: 3
+    unfreeze_last_stages_until: 15
+
+optimizer:
+  lr: 0.00005
+  weight_decay: 0.05
+  betas: [0.9, 0.999]
+
+scheduler:
+  warmup_epochs: 2
+  min_lr_ratio: 0.05
+
+loss:
+  focal_gamma: 2.0
+  alpha: auto
+  task_weights:
+    real_fake: 1.0
+    inswapper: 0.7
+    gan: 0.5
+    boundary: 0.4
+    quality: 0.2
+
+paths:
+  best_checkpoint: checkpoints/best_model.pt
+  last_checkpoint: checkpoints/last_epoch.pt
+  history_csv: checkpoints/history.csv

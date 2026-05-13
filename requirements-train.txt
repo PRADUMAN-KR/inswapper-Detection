@@ -1,0 +1,7 @@
+-r requirements.txt
+albumentations
+pandas
+scikit-learn
+pyyaml
+pytest
+httpx
