@@ -6,7 +6,7 @@ from core.model import ConvNeXtTinyDetector
 
 def test_predict_tensor_returns_detection_result():
     service = DetectorService(
-        model=ConvNeXtTinyDetector(pretrained=False),
+        model=ConvNeXtTinyDetector(pretrained=False, allow_fallback=True),
         device=torch.device("cpu"),
         threshold=0.5,
         checkpoint_loaded=False,

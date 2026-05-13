@@ -60,7 +60,6 @@ def compute_binary_metrics(labels: list[float], scores: list[float]) -> BinaryMe
 def fuse_detection_scores(
     real_fake: np.ndarray,
     inswapper: np.ndarray,
-    gan: np.ndarray,
     boundary: np.ndarray,
     weights: dict[str, float] | None = None,
 ) -> np.ndarray:
@@ -68,6 +67,5 @@ def fuse_detection_scores(
     return (
         weights["real_fake"] * real_fake
         + weights["inswapper"] * inswapper
-        + weights["gan"] * gan
         + weights["boundary"] * boundary
     )

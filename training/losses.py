@@ -34,7 +34,6 @@ class MultiTaskDetectionLoss(nn.Module):
         self.weights = weights or {
             "real_fake": 1.0,
             "inswapper": 0.7,
-            "gan": 0.5,
             "boundary": 0.4,
             "quality": 0.2,
         }
@@ -47,7 +46,6 @@ class MultiTaskDetectionLoss(nn.Module):
         losses = {
             "real_fake": self.binary_loss(outputs["real_fake"], targets["real_fake"].float().view(-1, 1)),
             "inswapper": self.binary_loss(outputs["inswapper"], targets["inswapper"].float().view(-1, 1)),
-            "gan": self.binary_loss(outputs["gan"], targets["gan"].float().view(-1, 1)),
             "boundary": self.binary_loss(outputs["boundary"], targets["boundary"].float().view(-1, 1)),
             "quality": self.quality_loss(outputs["quality"], targets["quality"].long().view(-1)),
         }

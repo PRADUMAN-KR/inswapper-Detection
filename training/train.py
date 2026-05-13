@@ -22,7 +22,7 @@ from training.utils import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train INSwapper/GAN detector.")
+    parser = argparse.ArgumentParser(description="Train INSwapper detector.")
     parser.add_argument("--config", default="configs/convnext_tiny.yaml")
     parser.add_argument("--resume", default=None)
     return parser.parse_args()

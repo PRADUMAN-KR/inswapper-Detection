@@ -93,7 +93,6 @@ def val_epoch(
     labels_all: list[float] = []
     real_fake_all: list[float] = []
     inswapper_all: list[float] = []
-    gan_all: list[float] = []
     boundary_all: list[float] = []
     for batch in loader:
         rgb = batch["rgb"].to(device, non_blocking=True)
@@ -110,12 +109,10 @@ def val_epoch(
         labels_all.extend(targets["real_fake"].flatten().detach().cpu().tolist())
         real_fake_all.extend(torch.sigmoid(outputs["real_fake"]).flatten().detach().cpu().tolist())
         inswapper_all.extend(torch.sigmoid(outputs["inswapper"]).flatten().detach().cpu().tolist())
-        gan_all.extend(torch.sigmoid(outputs["gan"]).flatten().detach().cpu().tolist())
         boundary_all.extend(torch.sigmoid(outputs["boundary"]).flatten().detach().cpu().tolist())
     fused = fuse_detection_scores(
         real_fake=torch.tensor(real_fake_all).numpy(),
         inswapper=torch.tensor(inswapper_all).numpy(),
-        gan=torch.tensor(gan_all).numpy(),
         boundary=torch.tensor(boundary_all).numpy(),
         weights=score_fusion_weights,
     )

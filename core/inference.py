@@ -125,7 +125,7 @@ class DetectorService:
             if threshold is None:
                 threshold = float(checkpoint_threshold if checkpoint_threshold is not None else 0.5)
         elif allow_missing:
-            model = ConvNeXtTinyDetector(pretrained=False).to(resolved)
+            model = ConvNeXtTinyDetector(pretrained=False, allow_fallback=True).to(resolved)
             image_size = 256
             frequency_mode = "fft"
             score_fusion_weights = DEFAULT_SCORE_FUSION_WEIGHTS

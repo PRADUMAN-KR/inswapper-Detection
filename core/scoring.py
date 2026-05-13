@@ -2,9 +2,8 @@ import torch
 
 
 DEFAULT_SCORE_FUSION_WEIGHTS = {
-    "real_fake": 0.45,
-    "inswapper": 0.25,
-    "gan": 0.15,
+    "real_fake": 0.55,
+    "inswapper": 0.30,
     "boundary": 0.15,
 }
 
@@ -17,6 +16,5 @@ def fuse_output_scores(
     return (
         weights["real_fake"] * torch.sigmoid(outputs["real_fake"]).flatten()
         + weights["inswapper"] * torch.sigmoid(outputs["inswapper"]).flatten()
-        + weights["gan"] * torch.sigmoid(outputs["gan"]).flatten()
         + weights["boundary"] * torch.sigmoid(outputs["boundary"]).flatten()
     )

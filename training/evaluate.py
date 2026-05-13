@@ -41,7 +41,6 @@ def main() -> None:
     scores: list[float] = []
     real_fake: list[float] = []
     inswapper: list[float] = []
-    gan: list[float] = []
     boundary: list[float] = []
     for batch in loader:
         outputs = model(
@@ -52,13 +51,11 @@ def main() -> None:
         labels.extend(batch["targets"]["real_fake"].tolist())
         real_fake.extend(torch.sigmoid(outputs["real_fake"]).flatten().cpu().tolist())
         inswapper.extend(torch.sigmoid(outputs["inswapper"]).flatten().cpu().tolist())
-        gan.extend(torch.sigmoid(outputs["gan"]).flatten().cpu().tolist())
         boundary.extend(torch.sigmoid(outputs["boundary"]).flatten().cpu().tolist())
 
     scores = fuse_detection_scores(
         real_fake=torch.tensor(real_fake).numpy(),
         inswapper=torch.tensor(inswapper).numpy(),
-        gan=torch.tensor(gan).numpy(),
         boundary=torch.tensor(boundary).numpy(),
         weights=cfg.get("score_fusion"),
     ).tolist()
@@ -72,8 +69,8 @@ def main() -> None:
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["label", "final_score", "real_fake", "inswapper", "gan", "boundary", "prediction"])
-        writer.writerows(zip(labels, scores, real_fake, inswapper, gan, boundary, preds, strict=True))
+        writer.writerow(["label", "final_score", "real_fake", "inswapper", "boundary", "prediction"])
+        writer.writerows(zip(labels, scores, real_fake, inswapper, boundary, preds, strict=True))
 
 
 if __name__ == "__main__":

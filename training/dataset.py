@@ -64,6 +64,9 @@ class DeepfakeDataset(Dataset):
         self.manifest_path = Path(manifest_path)
         self.root_dir = Path(root_dir) if root_dir else self.manifest_path.parent
         self.frame = pd.read_csv(self.manifest_path)
+        self.frame = self.frame.dropna(how="all").reset_index(drop=True)
+        if self.frame.empty:
+            raise ValueError(f"Manifest has no samples: {self.manifest_path}")
         required = {"path", "label"}
         missing = required - set(self.frame.columns)
         if missing:
@@ -95,13 +98,11 @@ class DeepfakeDataset(Dataset):
         label = float(row["label"])
         fake_type = str(row.get("fake_type", row.get("source", "real"))).lower()
         is_inswapper = float(row.get("is_inswapper", int("inswapper" in fake_type)))
-        is_gan = float(row.get("is_gan", int("gan" in fake_type)))
         boundary = float(row.get("boundary_label", label))
         quality = int(row.get("quality_label", 0))
         return {
             "real_fake": torch.tensor(label, dtype=torch.float32),
             "inswapper": torch.tensor(is_inswapper, dtype=torch.float32),
-            "gan": torch.tensor(is_gan, dtype=torch.float32),
             "boundary": torch.tensor(boundary, dtype=torch.float32),
             "quality": torch.tensor(quality, dtype=torch.long),
         }

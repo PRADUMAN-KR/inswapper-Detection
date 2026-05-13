@@ -24,7 +24,6 @@ def infer_metadata(row) -> dict[str, object]:
     return {
         "fake_type": fake_type,
         "is_inswapper": int("inswapper" in fake_type or "inswapper" in source),
-        "is_gan": int("gan" in fake_type or "gan" in source),
         "boundary_label": int(row.get("boundary_label", row["label"])),
         "quality_label": int(row.get("quality_label", 0)),
         "source": source,

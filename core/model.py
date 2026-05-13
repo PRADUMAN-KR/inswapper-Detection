@@ -32,13 +32,14 @@ class FrequencyBranch(nn.Module):
 
 
 class ConvNeXtTinyDetector(nn.Module):
-    """ConvNeXt-Tiny RGB branch + frequency branch + multi-task heads."""
+    """ConvNeXt-Tiny RGB branch + frequency branch + INSwapper-focused heads."""
 
     def __init__(
         self,
         pretrained: bool = False,
         backbone: str = "convnext_tiny",
         drop_path_rate: float = 0.1,
+        allow_fallback: bool = False,
     ) -> None:
         super().__init__()
         self.backbone = backbone
@@ -55,7 +56,11 @@ class ConvNeXtTinyDetector(nn.Module):
             )
             rgb_features = int(self.rgb_backbone.num_features)
             self.uses_timm = True
-        except Exception:
+        except Exception as exc:
+            if not allow_fallback:
+                raise RuntimeError(
+                    f"Could not create {backbone}. Install timm before training or serving production checkpoints."
+                ) from exc
             rgb_features = 768
             self.rgb_backbone = nn.Sequential(
                 nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1),
@@ -85,7 +90,6 @@ class ConvNeXtTinyDetector(nn.Module):
             {
                 "real_fake": nn.Linear(512, 1),
                 "inswapper": nn.Linear(512, 1),
-                "gan": nn.Linear(512, 1),
                 "boundary": nn.Linear(512, 1),
                 "quality": nn.Linear(512, 3),
             }
@@ -152,6 +156,7 @@ def load_from_checkpoint(
         pretrained=False,
         backbone=model_config.get("backbone", backbone),
         drop_path_rate=model_config.get("drop_path_rate", 0.1),
+        allow_fallback=False,
     )
     state_dict = checkpoint.get("model_state_dict", checkpoint)
     model.load_state_dict(_strip_module_prefix(state_dict), strict=strict)

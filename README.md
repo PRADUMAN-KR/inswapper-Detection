@@ -1,6 +1,6 @@
 # INSwapper Detector
 
-Production-oriented pipeline for detecting INSwapper/GAN face swaps.
+Production-oriented pipeline for detecting INSwapper face swaps.
 
 ## Layout
 
@@ -13,11 +13,19 @@ Production-oriented pipeline for detecting INSwapper/GAN face swaps.
 
 ## Setup
 
+Use Python 3.12 for the training/serving container. Very new Python versions may not have wheels for `insightface`, `onnxruntime`, or other ML packages yet.
+
 ```bash
-python -m venv .venv
+uv sync --extra train --extra test
+cp .env.example .env
+```
+
+Pip fallback:
+
+```bash
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-train.txt
-cp .env.example .env
 ```
 
 ## Data
@@ -79,7 +87,7 @@ Final ConvNeXt-Tiny training recipe:
 - production face detection with InsightFace before crop generation and inference
 - pretrained `convnext_tiny` backbone from `timm`
 - RGB branch plus frequency CNN branch
-- multi-task heads for real/fake, InSwapper, GAN, boundary artifacts, and quality/compression
+- multi-task heads for real/fake, InSwapper, boundary artifacts, and quality/compression
 - weighted multi-task loss with automatic class-balance alpha
 - balanced sampler for real/fake imbalance
 - phased fine-tuning: frozen backbone, last-stage unfreeze, full-model unfreeze
@@ -96,7 +104,7 @@ This is the training pipeline the project follows for production model developme
 flowchart TD
     A[Raw Data] --> B{Input Type}
 
-    B -->|Images| IMG_SRC[Image Sources<br/>Real / InSwapper / GAN]
+    B -->|Images| IMG_SRC[Image Sources<br/>Real / InSwapper]
     B -->|Videos| VID_SRC[Video Sources<br/>Real / InSwapper]
 
     VID_SRC --> VFE[Scene-Aware Frame Extraction<br/>scripts/build_video_frame_manifest.py]
@@ -129,9 +137,8 @@ flowchart TD
 
     META --> META_IMAGE[image_path]
     META --> META_LABEL[label<br/>0 real / 1 fake]
-    META --> META_FAKE_TYPE[fake_type<br/>real / inswapper / gan]
+    META --> META_FAKE_TYPE[fake_type<br/>real / inswapper]
     META --> META_INSWAPPER[is_inswapper]
-    META --> META_GAN[is_gan]
     META --> META_BOUNDARY[boundary_label]
     META --> META_QUALITY[quality_label]
     META --> META_SOURCE[source]
@@ -200,7 +207,6 @@ flowchart TD
 
     FUSION_MLP --> HEAD_RF[Real/Fake Head]
     FUSION_MLP --> HEAD_INSWAPPER[InSwapper Head]
-    FUSION_MLP --> HEAD_GAN[GAN Head]
     FUSION_MLP --> HEAD_BOUNDARY[Boundary Artifact Head]
     FUSION_MLP --> HEAD_QUALITY[Quality / Compression Head]
 
@@ -218,17 +224,15 @@ flowchart TD
 
     HEAD_RF --> LOSS_RF[BCE / Focal Loss<br/>Real/Fake]
     HEAD_INSWAPPER --> LOSS_INSWAPPER[BCE / Focal Loss<br/>InSwapper]
-    HEAD_GAN --> LOSS_GAN[BCE / Focal Loss<br/>GAN]
     HEAD_BOUNDARY --> LOSS_BOUNDARY[BCE / Focal Loss<br/>Boundary]
     HEAD_QUALITY --> LOSS_QUALITY[CrossEntropy Loss<br/>Quality]
 
     LOSS_RF --> MULTI_LOSS
     LOSS_INSWAPPER --> MULTI_LOSS
-    LOSS_GAN --> MULTI_LOSS
     LOSS_BOUNDARY --> MULTI_LOSS
     LOSS_QUALITY --> MULTI_LOSS
 
-    MULTI_LOSS --> TOTAL_LOSS[Total Loss<br/>1.0 RF + 0.7 InSwapper + 0.5 GAN + 0.4 Boundary + 0.2 Quality]
+    MULTI_LOSS --> TOTAL_LOSS[Total Loss<br/>1.0 RF + 0.7 InSwapper + 0.4 Boundary + 0.2 Quality]
 
     TOTAL_LOSS --> AMP[AMP Mixed Precision]
     AMP --> ACCUM[Gradient Accumulation]
@@ -241,7 +245,7 @@ flowchart TD
     VAL_FORWARD --> VAL_SCORES[Sigmoid / Softmax Scores]
 
     VAL_SCORES --> SCORE_FUSION[Score Fusion]
-    SCORE_FUSION --> FINAL_SCORE[final_score =<br/>0.45 real_fake<br/>+ 0.25 inswapper<br/>+ 0.15 gan<br/>+ 0.15 boundary]
+    SCORE_FUSION --> FINAL_SCORE[final_score =<br/>0.55 real_fake<br/>+ 0.30 inswapper<br/>+ 0.15 boundary]
 
     FINAL_SCORE --> THRESHOLD_SWEEP[Threshold Sweep]
     THRESHOLD_SWEEP --> THRESH_F1[Best F1 Threshold]
@@ -259,7 +263,6 @@ flowchart TD
     VAL_METRICS --> METRIC_FPR[False Positive Rate]
     VAL_METRICS --> METRIC_FNR[False Negative Rate]
     VAL_METRICS --> METRIC_INSWAPPER[InSwapper Recall]
-    VAL_METRICS --> METRIC_GAN[GAN Recall]
     VAL_METRICS --> METRIC_COMPRESSED[Compressed Real FPR]
 
     VAL_METRICS --> BEST_PRODUCT{Best Product Metric?}
@@ -283,7 +286,6 @@ flowchart TD
     TEST_REPORTS --> REPORT_REAL[Clean Real Performance]
     TEST_REPORTS --> REPORT_COMPRESSED[Compressed Real False Positives]
     TEST_REPORTS --> REPORT_INSWAPPER[InSwapper Recall]
-    TEST_REPORTS --> REPORT_GAN[GAN Recall]
     TEST_REPORTS --> REPORT_QUALITY[Low Quality Robustness]
     TEST_REPORTS --> REPORT_IDENTITY[Unseen Identity Generalization]
     TEST_REPORTS --> REPORT_SOURCE[Unseen Source Generalization]

@@ -1,0 +1,42 @@
+[project]
+name = "inswapper-detector"
+version = "0.1.0"
+description = "Production-grade INSwapper face manipulation detector."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "insightface",
+    "numpy",
+    "onnxruntime",
+    "opencv-python-headless",
+    "pillow",
+    "pydantic-settings",
+    "python-multipart",
+    "timm",
+    "torch",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+train = [
+    "albumentations",
+    "pandas",
+    "pyyaml",
+    "scikit-learn",
+]
+test = [
+    "httpx",
+    "pytest",
+]
+dev = [
+    "albumentations",
+    "httpx",
+    "pandas",
+    "pytest",
+    "pyyaml",
+    "scikit-learn",
+]
+
+[tool.uv]
+package = false
