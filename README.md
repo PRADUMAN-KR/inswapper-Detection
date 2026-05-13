@@ -1,5 +1,13 @@
 # INSwapper Detector
 
+# InSwapper Detector
+
+> 🚧 This project is currently under active development.
+> APIs, architecture, and training pipeline may change frequently.
+
+![Status](https://img.shields.io/badge/status-under--development-orange)
+
+
 Production-oriented pipeline for detecting INSwapper face swaps.
 
 ## Layout
