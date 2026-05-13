@@ -1,4 +1,3 @@
-# INSwapper Detector
 
 # InSwapper Detector
 
