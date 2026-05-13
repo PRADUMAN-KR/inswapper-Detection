@@ -3,7 +3,7 @@ from typing import Any
 
 import torch
 from torch import nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
 from training.metrics import BinaryMetrics, compute_binary_metrics, fuse_detection_scores
@@ -49,7 +49,7 @@ def train_epoch(
             name: value.to(device, non_blocking=True)
             for name, value in batch["targets"].items()
         }
-        with autocast(enabled=amp and device.type == "cuda"):
+        with autocast(device_type=device.type, enabled=amp and device.type == "cuda"):
             outputs = model(rgb, frequency=frequency, return_dict=True)
             raw_loss = criterion(outputs, targets)
             loss = (raw_loss[0] if isinstance(raw_loss, tuple) else raw_loss) / grad_accum_steps
@@ -86,6 +86,7 @@ def val_epoch(
     criterion: nn.Module,
     device: torch.device,
     amp: bool = True,
+    score_fusion_weights: dict[str, float] | None = None,
 ) -> tuple[float, BinaryMetrics]:
     model.eval()
     running_loss = 0.0
@@ -101,7 +102,7 @@ def val_epoch(
             name: value.to(device, non_blocking=True)
             for name, value in batch["targets"].items()
         }
-        with autocast(enabled=amp and device.type == "cuda"):
+        with autocast(device_type=device.type, enabled=amp and device.type == "cuda"):
             outputs = model(rgb, frequency=frequency, return_dict=True)
             raw_loss = criterion(outputs, targets)
             loss = raw_loss[0] if isinstance(raw_loss, tuple) else raw_loss
@@ -116,6 +117,7 @@ def val_epoch(
         inswapper=torch.tensor(inswapper_all).numpy(),
         gan=torch.tensor(gan_all).numpy(),
         boundary=torch.tensor(boundary_all).numpy(),
+        weights=score_fusion_weights,
     )
     return running_loss / len(loader.dataset), compute_binary_metrics(labels_all, fused.tolist())
 

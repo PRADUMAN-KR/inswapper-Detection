@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "local"
     model_path: Path = Path("checkpoints/best_model.pt")
-    threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     device: str = "auto"
     max_upload_mb: int = Field(default=100, ge=1)
     cors_origins: list[str] = ["*"]

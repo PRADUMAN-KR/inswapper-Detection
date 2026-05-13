@@ -76,6 +76,7 @@ Training history is written to `checkpoints/history.csv`.
 
 Final ConvNeXt-Tiny training recipe:
 
+- production face detection with InsightFace before crop generation and inference
 - pretrained `convnext_tiny` backbone from `timm`
 - RGB branch plus frequency CNN branch
 - multi-task heads for real/fake, InSwapper, GAN, boundary artifacts, and quality/compression
@@ -339,4 +340,4 @@ This avoids wasting all samples on near-duplicate frames from one shot and gives
 
 - Put the trained checkpoint at `checkpoints/best_model.pt` or set `INSWAPPER_MODEL_PATH`.
 - Tune `INSWAPPER_THRESHOLD` from validation metrics, not from the test set.
-- Replace `core.preprocessing.align_face()` with a deterministic face detector/alignment step before final deployment.
+- Default face detection is `INSWAPPER_FACE_DETECTOR=insightface`. Use `opencv_haar` only for local development experiments.

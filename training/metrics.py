@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, roc_curve
 
+from core.scoring import DEFAULT_SCORE_FUSION_WEIGHTS
+
 
 @dataclass
 class BinaryMetrics:
@@ -62,7 +64,7 @@ def fuse_detection_scores(
     boundary: np.ndarray,
     weights: dict[str, float] | None = None,
 ) -> np.ndarray:
-    weights = weights or {"real_fake": 0.45, "inswapper": 0.25, "gan": 0.15, "boundary": 0.15}
+    weights = weights or DEFAULT_SCORE_FUSION_WEIGHTS
     return (
         weights["real_fake"] * real_fake
         + weights["inswapper"] * inswapper

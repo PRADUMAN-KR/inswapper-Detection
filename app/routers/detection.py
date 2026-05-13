@@ -3,6 +3,7 @@ import binascii
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from PIL import UnidentifiedImageError
 
 from app.config import Settings, get_settings
 from app.dependencies import get_model
@@ -35,7 +36,12 @@ async def detect(
     service: Annotated[DetectorService, Depends(get_model)],
 ) -> DetectionResponse:
     data = await _read_upload(file, settings)
-    result = service.predict_bytes(data)
+    try:
+        result = service.predict_bytes(data)
+    except (OSError, ValueError, UnidentifiedImageError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image file.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return DetectionResponse(filename=file.filename, result=result)
 
 
@@ -48,7 +54,12 @@ async def detect_base64(
         data = base64.b64decode(payload.image_base64, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 image.") from exc
-    result = service.predict_bytes(data)
+    try:
+        result = service.predict_bytes(data)
+    except (OSError, ValueError, UnidentifiedImageError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image file.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return DetectionResponse(filename=None, result=result)
 
 
@@ -73,6 +84,8 @@ async def detect_video(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return VideoDetectionResponse(filename=file.filename, **result.__dict__)
 
 
@@ -86,7 +99,12 @@ async def detect_batch(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files provided.")
 
     images = [await _read_upload(file, settings) for file in files]
-    results = service.predict_batch_bytes(images)
+    try:
+        results = service.predict_batch_bytes(images)
+    except (OSError, ValueError, UnidentifiedImageError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="One or more image files are invalid.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return BatchDetectionResponse(
         items=[
             DetectionResponse(filename=file.filename, result=result)

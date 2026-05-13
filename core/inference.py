@@ -2,9 +2,11 @@ from pathlib import Path
 
 import torch
 
+from core.frequency import frequency_features
 from core.model import ConvNeXtTinyDetector, load_from_checkpoint
-from core.postprocessing import logits_to_result
+from core.postprocessing import probability_to_result
 from core.preprocessing import preprocess_image, preprocess_pil_image
+from core.scoring import DEFAULT_SCORE_FUSION_WEIGHTS, fuse_output_scores
 from core.types import DetectionResult, VideoDetectionResult, VideoFrameResult
 from core.video import sample_scene_aware_frames_from_bytes, sample_scene_aware_frames_from_path
 
@@ -15,10 +17,19 @@ def resolve_device(device: str) -> torch.device:
     return torch.device(device)
 
 
-def predict(model: torch.nn.Module, batch: torch.Tensor, device: torch.device) -> torch.Tensor:
+def predict(
+    model: torch.nn.Module,
+    batch: torch.Tensor,
+    device: torch.device,
+    frequency_mode: str = "fft",
+    score_fusion_weights: dict[str, float] | None = None,
+) -> torch.Tensor:
     model.eval()
     with torch.inference_mode():
-        return model(batch.to(device))
+        rgb = batch.to(device)
+        frequency = frequency_features(rgb, mode=frequency_mode).to(device)
+        outputs = model(rgb, frequency=frequency, return_dict=True)
+        return fuse_output_scores(outputs, score_fusion_weights)
 
 
 def predict_batch(
@@ -26,9 +37,31 @@ def predict_batch(
     batch: torch.Tensor,
     device: torch.device,
     threshold: float,
+    frequency_mode: str = "fft",
+    score_fusion_weights: dict[str, float] | None = None,
 ) -> list[DetectionResult]:
-    logits = predict(model, batch, device)
-    return [logits_to_result(logit, threshold) for logit in logits]
+    scores = predict(
+        model,
+        batch,
+        device,
+        frequency_mode=frequency_mode,
+        score_fusion_weights=score_fusion_weights,
+    )
+    return [probability_to_result(float(score.detach().cpu()), threshold) for score in scores]
+
+
+def _preprocess_video_frames(frames, image_size: int) -> tuple[list[torch.Tensor], list]:
+    tensors: list[torch.Tensor] = []
+    kept_frames = []
+    for frame in frames:
+        try:
+            tensors.append(preprocess_pil_image(frame.image, image_size=image_size, require_face=True))
+            kept_frames.append(frame)
+        except ValueError:
+            continue
+    if not tensors:
+        raise ValueError("No usable face frames found in video.")
+    return tensors, kept_frames
 
 
 def aggregate_frame_results(results: list[DetectionResult], threshold: float) -> DetectionResult:
@@ -54,13 +87,17 @@ class DetectorService:
         device: torch.device,
         threshold: float,
         checkpoint_loaded: bool,
-        image_size: int = 224,
+        image_size: int = 256,
+        frequency_mode: str = "fft",
+        score_fusion_weights: dict[str, float] | None = None,
     ) -> None:
         self.model = model
         self.device = device
         self.threshold = threshold
         self.checkpoint_loaded = checkpoint_loaded
         self.image_size = image_size
+        self.frequency_mode = frequency_mode
+        self.score_fusion_weights = score_fusion_weights or DEFAULT_SCORE_FUSION_WEIGHTS
 
     @property
     def is_ready(self) -> bool:
@@ -71,7 +108,7 @@ class DetectorService:
         cls,
         checkpoint_path: str | Path,
         device: str = "auto",
-        threshold: float = 0.5,
+        threshold: float | None = None,
         allow_missing: bool = False,
     ) -> "DetectorService":
         resolved = resolve_device(device)
@@ -80,18 +117,42 @@ class DetectorService:
         if loaded:
             model = load_from_checkpoint(path, resolved)
             checkpoint = torch.load(path, map_location="cpu")
-            image_size = int(checkpoint.get("config", {}).get("model", {}).get("image_size", 224))
+            model_config = checkpoint.get("config", {}).get("model", {})
+            image_size = int(model_config.get("image_size", 256))
+            frequency_mode = model_config.get("frequency_mode", "fft")
+            score_fusion_weights = checkpoint.get("config", {}).get("score_fusion", DEFAULT_SCORE_FUSION_WEIGHTS)
+            checkpoint_threshold = checkpoint.get("threshold")
+            if threshold is None:
+                threshold = float(checkpoint_threshold if checkpoint_threshold is not None else 0.5)
         elif allow_missing:
             model = ConvNeXtTinyDetector(pretrained=False).to(resolved)
-            image_size = 224
+            image_size = 256
+            frequency_mode = "fft"
+            score_fusion_weights = DEFAULT_SCORE_FUSION_WEIGHTS
+            threshold = 0.5 if threshold is None else threshold
         else:
             raise FileNotFoundError(f"Checkpoint not found: {path}")
         model.eval()
-        return cls(model=model, device=resolved, threshold=threshold, checkpoint_loaded=loaded, image_size=image_size)
+        return cls(
+            model=model,
+            device=resolved,
+            threshold=threshold,
+            checkpoint_loaded=loaded,
+            image_size=image_size,
+            frequency_mode=frequency_mode,
+            score_fusion_weights=score_fusion_weights,
+        )
 
     def predict_tensor(self, image: torch.Tensor) -> DetectionResult:
         batch = image.unsqueeze(0) if image.ndim == 3 else image
-        return predict_batch(self.model, batch, self.device, self.threshold)[0]
+        return predict_batch(
+            self.model,
+            batch,
+            self.device,
+            self.threshold,
+            self.frequency_mode,
+            self.score_fusion_weights,
+        )[0]
 
     def predict_bytes(self, image_bytes: bytes) -> DetectionResult:
         tensor = preprocess_image(image_bytes, image_size=self.image_size)
@@ -99,7 +160,14 @@ class DetectorService:
 
     def predict_batch_bytes(self, images: list[bytes]) -> list[DetectionResult]:
         tensors = [preprocess_image(image, image_size=self.image_size) for image in images]
-        return predict_batch(self.model, torch.stack(tensors), self.device, self.threshold)
+        return predict_batch(
+            self.model,
+            torch.stack(tensors),
+            self.device,
+            self.threshold,
+            self.frequency_mode,
+            self.score_fusion_weights,
+        )
 
     def predict_video_path(
         self,
@@ -114,8 +182,15 @@ class DetectorService:
             scene_threshold=scene_threshold,
             max_scenes=max_scenes,
         )
-        tensors = [preprocess_pil_image(frame.image, image_size=self.image_size) for frame in frames]
-        results = predict_batch(self.model, torch.stack(tensors), self.device, self.threshold)
+        tensors, frames = _preprocess_video_frames(frames, self.image_size)
+        results = predict_batch(
+            self.model,
+            torch.stack(tensors),
+            self.device,
+            self.threshold,
+            self.frequency_mode,
+            self.score_fusion_weights,
+        )
         frame_results = [
             VideoFrameResult(
                 scene_index=frame.scene_index,
@@ -147,8 +222,15 @@ class DetectorService:
             scene_threshold=scene_threshold,
             max_scenes=max_scenes,
         )
-        tensors = [preprocess_pil_image(frame.image, image_size=self.image_size) for frame in frames]
-        results = predict_batch(self.model, torch.stack(tensors), self.device, self.threshold)
+        tensors, frames = _preprocess_video_frames(frames, self.image_size)
+        results = predict_batch(
+            self.model,
+            torch.stack(tensors),
+            self.device,
+            self.threshold,
+            self.frequency_mode,
+            self.score_fusion_weights,
+        )
         frame_results = [
             VideoFrameResult(
                 scene_index=frame.scene_index,

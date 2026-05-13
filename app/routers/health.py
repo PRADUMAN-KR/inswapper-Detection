@@ -18,5 +18,6 @@ def ready(model: DetectorService = Depends(get_model)) -> dict[str, object]:
         "model_loaded": model.checkpoint_loaded,
         "device": str(model.device),
         "threshold": model.threshold,
+        "image_size": model.image_size,
+        "frequency_mode": model.frequency_mode,
     }
-

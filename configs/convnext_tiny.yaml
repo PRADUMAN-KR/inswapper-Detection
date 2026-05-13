@@ -47,6 +47,12 @@ loss:
     boundary: 0.4
     quality: 0.2
 
+score_fusion:
+  real_fake: 0.45
+  inswapper: 0.25
+  gan: 0.15
+  boundary: 0.15
+
 paths:
   best_checkpoint: checkpoints/best_model.pt
   last_checkpoint: checkpoints/last_epoch.pt

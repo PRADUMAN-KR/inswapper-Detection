@@ -4,7 +4,7 @@ import math
 from pathlib import Path
 
 import torch
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from core.model import ConvNeXtTinyDetector
@@ -140,7 +140,7 @@ def main() -> None:
         warmup_steps=warmup_steps,
         min_lr_ratio=cfg["scheduler"].get("min_lr_ratio", 0.05),
     )
-    scaler = GradScaler(enabled=cfg["train"].get("amp", True) and device.type == "cuda")
+    scaler = GradScaler(device.type, enabled=cfg["train"].get("amp", True) and device.type == "cuda")
     best_auc = -1.0
     best_product_metric = -1.0
     early_stopping = EarlyStopping(
@@ -200,7 +200,14 @@ def main() -> None:
             grad_accum_steps=grad_accum_steps,
             max_grad_norm=cfg["train"].get("max_grad_norm"),
         )
-        val_loss, metrics = val_epoch(model, val_loader, criterion, device, cfg["train"].get("amp", True))
+        val_loss, metrics = val_epoch(
+            model,
+            val_loader,
+            criterion,
+            device,
+            cfg["train"].get("amp", True),
+            score_fusion_weights=cfg.get("score_fusion"),
+        )
 
         print(
             f"epoch={epoch:03d} phase={current_phase} lr={lr:.6g} train_loss={train_loss:.4f} val_loss={val_loss:.4f} "

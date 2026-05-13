@@ -56,7 +56,7 @@ class DeepfakeDataset(Dataset):
     def __init__(
         self,
         manifest_path: str | Path,
-        image_size: int = 224,
+        image_size: int = 256,
         train: bool = True,
         root_dir: str | Path | None = None,
         frequency_mode: str = "fft",
@@ -72,6 +72,14 @@ class DeepfakeDataset(Dataset):
         self.image_size = image_size
         self.frequency_mode = frequency_mode
         self.labels = self.frame["label"].astype(int).tolist()
+        invalid_labels = sorted(set(self.labels) - {0, 1})
+        if invalid_labels:
+            raise ValueError(f"Labels must be 0 or 1, found: {invalid_labels}")
+        if "quality_label" in self.frame.columns:
+            quality_values = set(self.frame["quality_label"].dropna().astype(int).tolist())
+            invalid_quality = sorted(quality_values - {0, 1, 2})
+            if invalid_quality:
+                raise ValueError(f"quality_label must be 0, 1, or 2, found: {invalid_quality}")
 
     def __len__(self) -> int:
         return len(self.frame)

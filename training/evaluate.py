@@ -60,6 +60,7 @@ def main() -> None:
         inswapper=torch.tensor(inswapper).numpy(),
         gan=torch.tensor(gan).numpy(),
         boundary=torch.tensor(boundary).numpy(),
+        weights=cfg.get("score_fusion"),
     ).tolist()
 
     metrics = compute_binary_metrics(labels, scores)

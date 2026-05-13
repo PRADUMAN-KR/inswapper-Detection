@@ -7,3 +7,5 @@ timm
 pillow
 numpy
 opencv-python-headless
+insightface
+onnxruntime
