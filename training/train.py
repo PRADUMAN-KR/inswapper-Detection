@@ -1,14 +1,17 @@
 import argparse
 import csv
 import math
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import torch
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from core.model import ConvNeXtTinyDetector
-from training.dataset import DeepfakeDataset
+from training.dataset import DeepfakeDataset, ZarrDeepfakeDataset, create_dataset
 from training.losses import MultiTaskDetectionLoss
 from training.trainer import EarlyStopping, save_checkpoint, train_epoch, val_epoch
 from training.utils import (
@@ -28,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_loader(dataset: DeepfakeDataset, cfg: dict, train: bool, seed: int) -> DataLoader:
+def build_loader(dataset: DeepfakeDataset | ZarrDeepfakeDataset, cfg: dict, train: bool, seed: int) -> DataLoader:
     generator = torch.Generator()
     generator.manual_seed(seed)
     sampler = None
@@ -91,14 +94,14 @@ def main() -> None:
     checkpoint = torch.load(args.resume, map_location=device) if args.resume else None
     start_epoch = int(checkpoint["epoch"]) + 1 if checkpoint else 0
 
-    train_ds = DeepfakeDataset(
+    train_ds = create_dataset(
         cfg["data"]["train_manifest"],
         image_size=cfg["model"]["image_size"],
         train=True,
         root_dir=cfg["data"].get("root_dir"),
         frequency_mode=cfg["model"].get("frequency_mode", "fft"),
     )
-    val_ds = DeepfakeDataset(
+    val_ds = create_dataset(
         cfg["data"]["val_manifest"],
         image_size=cfg["model"]["image_size"],
         train=False,

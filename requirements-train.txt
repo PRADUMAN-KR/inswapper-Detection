@@ -5,3 +5,4 @@ scikit-learn
 pyyaml
 pytest
 httpx
+zarr

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from PIL import Image, ImageOps
@@ -121,3 +122,84 @@ class DeepfakeDataset(Dataset):
             rgb = (arr - mean) / std
         frequency = frequency_features(rgb.unsqueeze(0), mode=self.frequency_mode).squeeze(0)
         return {"rgb": rgb, "frequency": frequency, "targets": self._target(row)}
+
+
+class ZarrDeepfakeDataset(Dataset):
+    def __init__(
+        self,
+        zarr_path: str | Path,
+        image_size: int = 256,
+        train: bool = True,
+        frequency_mode: str = "fft",
+    ) -> None:
+        try:
+            import zarr
+        except ImportError as exc:
+            raise ImportError("zarr is required for ZarrDeepfakeDataset. Run: uv sync --extra train") from exc
+
+        self.zarr_path = Path(zarr_path)
+        self.group: Any = zarr.open_group(str(self.zarr_path), mode="r")
+        self.images = self.group["images"]
+        self.frame = pd.read_csv(self.zarr_path / "metadata.csv")
+        self.transforms = build_transforms(image_size=image_size, train=train)
+        self.image_size = image_size
+        self.frequency_mode = frequency_mode
+        self.labels = np.asarray(self.group["labels"][:], dtype=np.int64).tolist()
+        invalid_labels = sorted(set(self.labels) - {0, 1})
+        if invalid_labels:
+            raise ValueError(f"Labels must be 0 or 1, found: {invalid_labels}")
+
+    def __len__(self) -> int:
+        return int(self.images.shape[0])
+
+    def _target(self, index: int) -> dict[str, torch.Tensor]:
+        label = float(self.group["labels"][index])
+        is_inswapper = float(self.group["is_inswapper"][index])
+        boundary = float(self.group["boundary_label"][index])
+        quality = int(self.group["quality_label"][index])
+        return {
+            "real_fake": torch.tensor(label, dtype=torch.float32),
+            "inswapper": torch.tensor(is_inswapper, dtype=torch.float32),
+            "boundary": torch.tensor(boundary, dtype=torch.float32),
+            "quality": torch.tensor(quality, dtype=torch.long),
+        }
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        image = np.asarray(self.images[index], dtype=np.uint8)
+        if self.transforms is not None:
+            transformed = self.transforms(image=image)
+            rgb = transformed["image"]
+        else:
+            if image.shape[:2] != (self.image_size, self.image_size):
+                pil_image = Image.fromarray(image).resize((self.image_size, self.image_size))
+                image = np.asarray(pil_image, dtype=np.uint8)
+            arr = torch.from_numpy(image.astype("float32")).permute(2, 0, 1) / 255.0
+            mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+            std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+            rgb = (arr - mean) / std
+        frequency = frequency_features(rgb.unsqueeze(0), mode=self.frequency_mode).squeeze(0)
+        return {"rgb": rgb, "frequency": frequency, "targets": self._target(index)}
+
+
+def create_dataset(
+    manifest_path: str | Path,
+    image_size: int = 256,
+    train: bool = True,
+    root_dir: str | Path | None = None,
+    frequency_mode: str = "fft",
+) -> DeepfakeDataset | ZarrDeepfakeDataset:
+    path = Path(manifest_path)
+    if path.suffix == ".zarr" or path.is_dir():
+        return ZarrDeepfakeDataset(
+            path,
+            image_size=image_size,
+            train=train,
+            frequency_mode=frequency_mode,
+        )
+    return DeepfakeDataset(
+        path,
+        image_size=image_size,
+        train=train,
+        root_dir=root_dir,
+        frequency_mode=frequency_mode,
+    )

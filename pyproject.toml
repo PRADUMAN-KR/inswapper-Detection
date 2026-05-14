@@ -3,7 +3,7 @@ name = "inswapper-detector"
 version = "0.1.0"
 description = "Production-grade INSwapper face manipulation detector."
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "insightface",
@@ -24,6 +24,7 @@ train = [
     "pandas",
     "pyyaml",
     "scikit-learn",
+    "zarr",
 ]
 test = [
     "httpx",
@@ -36,6 +37,7 @@ dev = [
     "pytest",
     "pyyaml",
     "scikit-learn",
+    "zarr",
 ]
 
 [tool.uv]

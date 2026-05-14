@@ -47,6 +47,22 @@ data/raw/fake/0001.jpg,1,inswapper
 
 Split by identity/source video to avoid leakage.
 
+For the current local dataset layout, build the video manifest automatically:
+
+```bash
+uv run python scripts/build_video_manifest.py \
+  --data-root data \
+  --output-csv data/video_manifest.csv
+```
+
+This reads:
+
+- `data/inswapper/original_videos` as real
+- `data/inswapper/inswapper` as fake INSwapper
+- `data/inswapper/uniface` as fake UniFace manipulated videos
+
+Other original-video sources are intentionally excluded so the detector learns manipulation artifacts from the same source distribution instead of unrelated dataset differences. Training balance is handled by the sampler, not by dropping fake samples from the manifest.
+
 ## Train
 
 For image datasets, create a raw manifest such as `data/raw_manifest.csv`.
@@ -55,7 +71,7 @@ For video datasets, first convert videos into scene-aware training frames and wr
 
 ```bash
 python scripts/build_video_frame_manifest.py \
-  --videos data/video_train.csv \
+  --videos data/video_manifest.csv \
   --output-csv data/raw_manifest.csv \
   --output-dir data/raw/video_train_frames \
   --frames-per-scene 6
@@ -80,6 +96,38 @@ python scripts/split_metadata.py \
   --test data/test.csv
 ```
 
+For faster training on large datasets, pack each split into Zarr:
+
+```bash
+python scripts/build_zarr_dataset.py \
+  --metadata data/train.csv \
+  --output data/zarr/train.zarr \
+  --root-dir . \
+  --overwrite
+
+python scripts/build_zarr_dataset.py \
+  --metadata data/val.csv \
+  --output data/zarr/val.zarr \
+  --root-dir . \
+  --overwrite
+
+python scripts/build_zarr_dataset.py \
+  --metadata data/test.csv \
+  --output data/zarr/test.zarr \
+  --root-dir . \
+  --overwrite
+```
+
+To train from Zarr, set the config manifests to the `.zarr` directories:
+
+```yaml
+data:
+  root_dir: .
+  train_manifest: data/zarr/train.zarr
+  val_manifest: data/zarr/val.zarr
+  test_manifest: data/zarr/test.zarr
+```
+
 Then train the final ConvNeXt-Tiny multi-task detector:
 
 ```bash
@@ -94,6 +142,7 @@ Final ConvNeXt-Tiny training recipe:
 - production face detection with InsightFace before crop generation and inference
 - pretrained `convnext_tiny` backbone from `timm`
 - RGB branch plus frequency CNN branch
+- optional Zarr-backed dataset loading for high-throughput training
 - multi-task heads for real/fake, InSwapper, boundary artifacts, and quality/compression
 - weighted multi-task loss with automatic class-balance alpha
 - balanced sampler for real/fake imbalance
@@ -144,7 +193,7 @@ flowchart TD
 
     META --> META_IMAGE[image_path]
     META --> META_LABEL[label<br/>0 real / 1 fake]
-    META --> META_FAKE_TYPE[fake_type<br/>real / inswapper]
+    META --> META_FAKE_TYPE[fake_type<br/>real / inswapper / uniface]
     META --> META_INSWAPPER[is_inswapper]
     META --> META_BOUNDARY[boundary_label]
     META --> META_QUALITY[quality_label]

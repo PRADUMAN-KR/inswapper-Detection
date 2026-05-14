@@ -1,6 +1,9 @@
 import argparse
 import csv
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import torch
 import yaml
@@ -8,7 +11,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 from torch.utils.data import DataLoader
 
 from core.model import load_from_checkpoint
-from training.dataset import DeepfakeDataset
+from training.dataset import create_dataset
 from training.metrics import compute_binary_metrics, fuse_detection_scores
 
 
@@ -27,7 +30,7 @@ def main() -> None:
     cfg = yaml.safe_load(open(args.config, "r", encoding="utf-8"))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     manifest = args.manifest or cfg["data"].get("test_manifest") or cfg["data"]["val_manifest"]
-    ds = DeepfakeDataset(
+    ds = create_dataset(
         manifest,
         image_size=cfg["model"]["image_size"],
         train=False,

@@ -11,3 +11,4 @@ checkpoints/*.pth
 checkpoints/*.onnx
 checkpoints/*.csv
 
+data/*
