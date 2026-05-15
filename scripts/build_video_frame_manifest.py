@@ -1,5 +1,6 @@
 import argparse
 import csv
+import os
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -22,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-scenes", type=int, default=12)
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N videos for a smoke test.")
     parser.add_argument("--log-every", type=int, default=25, help="Print progress every N videos.")
-    parser.add_argument("--workers", type=int, default=1, help="Number of video workers. Use up to 4 for this dataset.")
+    parser.add_argument("--workers", type=int, default=1, help="Number of video workers. Try 4, 6, or 8 first.")
     parser.add_argument("--verbose", action="store_true", help="Print one line for every processed video.")
     return parser.parse_args()
 
@@ -130,7 +131,13 @@ def main() -> None:
     started_at = time.time()
     total_videos = len(tasks)
     log_every = max(1, int(args.log_every))
-    workers = max(1, min(int(args.workers), 4))
+    cpu_count = os.cpu_count() or 1
+    workers = max(1, min(int(args.workers), cpu_count))
+    if workers >= 8:
+        print(
+            f"warning: workers={workers} can be disk/CPU heavy; reduce it if the machine becomes unresponsive",
+            flush=True,
+        )
     print(
         f"extracting scene-aware frames from {total_videos} videos "
         f"frames_per_scene={args.frames_per_scene} max_scenes={args.max_scenes} workers={workers}",
